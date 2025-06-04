@@ -4,10 +4,32 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>basket</title>
+    <title>NBA Universe</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Lilita+One&family=Archivo:wght@400;500;600;700&family=Permanent+Marker&family=VT323&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="root"></div>
+    <canvas id="universe-canvas"></canvas>
+    <div id="scene-vignette"></div>
+    <div id="label-layer"></div>
+    <div id="nav-hint">
+      <b>drag</b> to orbit · <b>scroll</b> to zoom · <b>click</b> to explore
+    </div>
+    <div id="loader">
+      <div class="loader-title">NBA UNIVERSE</div>
+      <div class="loader-sub">loading the galaxy…</div>
+      <div class="cassette">
+        <div class="cassette-label">★ MAGIC '95 MIX ★<br/><small style="font-size:12px;font-family:monospace">NBA SALARY UNIVERSE</small></div>
+        <div class="cassette-window">
+          <div class="reel slow"></div>
+          <div class="cassette-bridge"></div>
+          <div class="reel"></div>
+        </div>
+      </div>
+      <div class="loader-bar"><i id="loader-bar-fill"></i></div>
+    </div>
+    <div id="ui-root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
