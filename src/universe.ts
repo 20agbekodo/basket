@@ -258,6 +258,7 @@ export class Universe {
       const lbl = document.createElement('div')
       lbl.className = 'salary-label ' + p.category
       lbl.innerHTML = this._labelHTML(p)
+      lbl.style.opacity = '0'
       this.labelLayer.appendChild(lbl)
 
       this.nodes.push({
