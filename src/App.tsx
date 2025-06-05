@@ -405,7 +405,7 @@ function RightBar({ player, onClose, onPick, onDelete }: {
             if (!q) return null
             return (
               <div className="sim" key={id} onClick={() => onPick(id)}>
-                <PlayerImg player={q} size={30} className="chip" />
+                <PlayerImg player={q} size={30} className="chip" localOnly />
                 <span className="nm">{q.name}</span>
                 <span className="mt">{q.pos} · {q.era}</span>
               </div>
