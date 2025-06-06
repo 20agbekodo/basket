@@ -25,6 +25,18 @@ function makeRadial(stops: [number, string][]): THREE.CanvasTexture {
   return t
 }
 
+// Lookup a numeric stat from a player by key string
+function statVal(p: Player, key: string): number {
+  switch (key) {
+    case 'ppg': return p.ppg; case 'rpg': return p.rpg; case 'apg': return p.apg
+    case 'fg': return p.fg; case 'tp': return p.tp; case 'ft': return p.ft
+    case 'per': return p.per; case 'ws': return p.ws; case 'bpm': return p.bpm
+    case 'salary': return p.salary; case 'year': return p.year
+    case 'birthYear': return p.birthYear
+    default: return 0
+  }
+}
+
 interface Node {
   p: Player
   hit: THREE.Mesh
@@ -43,6 +55,8 @@ interface Node {
   _w?: number
   _h?: number
   _vis?: boolean
+  _lx?: number   // cached DOM left (skip write when unchanged)
+  _ly?: number   // cached DOM top
 }
 
 interface UserNode {
@@ -58,7 +72,7 @@ interface UserNode {
   _screenR?: number
 }
 
-interface FilterState {
+export interface FilterState {
   query: string
   topN: number
   positions: Set<string>
@@ -68,18 +82,14 @@ interface FilterState {
   statRanges: Record<string, [number, number]>
 }
 
-interface PtrRec {
-  x: number
-  y: number
+export interface AxisMap {
+  x: string
+  y: string
+  z: string
 }
 
-interface Gesture {
-  pan: boolean
-  moved: number
-  multi?: boolean
-  dist?: number
-  mid?: { x: number; y: number }
-}
+interface PtrRec { x: number; y: number }
+interface Gesture { pan: boolean; moved: number; multi?: boolean; dist?: number; mid?: { x: number; y: number } }
 
 export class Universe {
   canvas: HTMLCanvasElement
@@ -121,6 +131,15 @@ export class Universe {
   layout = 'galaxy'
   energy = 0.42
   spinSpeed = 0.0075 + 0.42 * 0.08
+
+  // Similar-player connection lines
+  _simLines: THREE.Line[] = []
+
+  // Custom axis mapping for stat-space layout
+  axisMap: AxisMap = { x: 'ppg', y: 'per', z: 'birthYear' }
+
+  // Favorites set (IDs)
+  favorites: Set<number> = new Set()
 
   ptrs = new Map<number, PtrRec>()
   _gesture: Gesture | null = null
@@ -228,12 +247,13 @@ export class Universe {
   }
 
   _labelHTML(p: Player): string {
+    const star = this.favorites.has(p.id) ? '★ ' : ''
     if (p.category === 'user') {
-      return `<span class="nm">★ ${p.name}</span><span class="sal">$${Number(p.salary).toFixed(0)}M/yr</span>`
+      return `<span class="nm">${star}${p.name}</span><span class="sal">$${Number(p.salary).toFixed(0)}M/yr</span>`
     }
     const arrow = p.category === 'under' ? '▲' : (p.category === 'over' ? '▼' : '◆')
     const amt = (p.delta >= 0 ? '+' : '−') + '$' + Math.abs(p.delta).toFixed(0) + 'M'
-    return `<span class="nm">${p.name}</span><span class="sal"><span class="arrow">${arrow}</span> ${amt}</span>`
+    return `<span class="nm">${star}${p.name}</span><span class="sal"><span class="arrow">${arrow}</span> ${amt}</span>`
   }
 
   _buildNodes() {
@@ -283,32 +303,53 @@ export class Universe {
       anchors[pos] = new THREE.Vector3(Math.cos(a) * R * 1.05, 0, Math.sin(a) * R * 1.05)
     })
     const minY = 1990, maxY = 2024
-    this.nodes.forEach((node, i) => {
-      const p = node.p
-      let t: THREE.Vector3
-      if (mode === 'stats') {
-        const nx = (p.ppg - 8) / (36 - 8)
-        const ny = (p.per - 8) / (33 - 8)
-        const by = p.birthYear
-        const nz = Math.max(0, Math.min(1, (by - 1960) / (2005 - 1960)))
-        t = new THREE.Vector3((nx - 0.5) * R * 2.5, (ny - 0.5) * R * 2.3, (nz - 0.5) * R * 2.5)
-      } else if (mode === 'positions') {
-        const a = anchors[p.pos] ?? new THREE.Vector3()
-        const jx = Math.sin(i * 7.1) * 7, jy = Math.cos(i * 3.3) * 9, jz = Math.sin(i * 5.7) * 7
-        t = new THREE.Vector3(a.x + jx, jy, a.z + jz)
-      } else if (mode === 'eras') {
-        const x = ((p.year - minY) / (maxY - minY) - 0.5) * R * 3.0
-        t = new THREE.Vector3(x, Math.sin(i * 2.7) * 11, Math.cos(i * 1.9) * 11)
-      } else if (mode === 'salary') {
-        const y = Math.max(-1, Math.min(1, -node.p.delta / 30)) * R * 1.3
-        const ring = (i / n) * Math.PI * 2
-        const rad = R * 0.8
-        t = new THREE.Vector3(Math.cos(ring) * rad, y, Math.sin(ring) * rad)
-      } else {
-        t = node.galaxyPos.clone()
-      }
-      node.targetLocal.copy(t)
-    })
+
+    if (mode === 'stats') {
+      // Compute per-axis min/max from actual data
+      const axes = (['x', 'y', 'z'] as const).map(ax => {
+        const key = this.axisMap[ax]
+        const vals = this.nodes.map(nd => statVal(nd.p, key))
+        const lo = Math.min(...vals), hi = Math.max(...vals)
+        return { key, lo, hi: hi > lo ? hi : lo + 1 }
+      })
+      this.nodes.forEach(node => {
+        const [ax, ay, az] = axes
+        const nx = (statVal(node.p, ax.key) - ax.lo) / (ax.hi - ax.lo)
+        const ny = (statVal(node.p, ay.key) - ay.lo) / (ay.hi - ay.lo)
+        const nz = (statVal(node.p, az.key) - az.lo) / (az.hi - az.lo)
+        node.targetLocal.copy(new THREE.Vector3(
+          (nx - 0.5) * R * 2.5,
+          (ny - 0.5) * R * 2.3,
+          (nz - 0.5) * R * 2.5,
+        ))
+      })
+    } else {
+      this.nodes.forEach((node, i) => {
+        const p = node.p
+        let t: THREE.Vector3
+        if (mode === 'positions') {
+          const a = anchors[p.pos] ?? new THREE.Vector3()
+          const jx = Math.sin(i * 7.1) * 7, jy = Math.cos(i * 3.3) * 9, jz = Math.sin(i * 5.7) * 7
+          t = new THREE.Vector3(a.x + jx, jy, a.z + jz)
+        } else if (mode === 'eras') {
+          const x = ((p.year - minY) / (maxY - minY) - 0.5) * R * 3.0
+          t = new THREE.Vector3(x, Math.sin(i * 2.7) * 11, Math.cos(i * 1.9) * 11)
+        } else if (mode === 'salary') {
+          const y = Math.max(-1, Math.min(1, -node.p.delta / 30)) * R * 1.3
+          const ring = (i / n) * Math.PI * 2
+          const rad = R * 0.8
+          t = new THREE.Vector3(Math.cos(ring) * rad, y, Math.sin(ring) * rad)
+        } else {
+          t = node.galaxyPos.clone()
+        }
+        node.targetLocal.copy(t)
+      })
+    }
+  }
+
+  setAxisMap(m: AxisMap) {
+    this.axisMap = m
+    if (this.layout === 'stats') this.setLayout('stats')
   }
 
   setEnergy(v: number) {
@@ -328,6 +369,60 @@ export class Universe {
       arr[i * 3] = c[0] * dim; arr[i * 3 + 1] = c[1] * dim; arr[i * 3 + 2] = c[2] * dim
     }
     col.needsUpdate = true
+  }
+
+  setFavorites(ids: Set<number>) {
+    this.favorites = ids
+    for (const n of this.nodes) {
+      n.label.innerHTML = this._labelHTML(n.p)
+      n.label.classList.toggle('fav', ids.has(n.p.id))
+    }
+  }
+
+  // Draw connection lines from selected player to their similar players
+  _rebuildSimLines() {
+    for (const l of this._simLines) {
+      this.group.remove(l)
+      l.geometry.dispose()
+      ;(l.material as THREE.Material).dispose()
+    }
+    this._simLines = []
+    if (this.selectedId === null) return
+    const src = this._nodeById(this.selectedId)
+    if (!src) return
+    for (const simId of src.p.similar) {
+      const tgt = this._nodeById(simId)
+      if (!tgt) continue
+      const geo = new THREE.BufferGeometry()
+      const pts = new Float32Array([
+        src.localPos.x, src.localPos.y, src.localPos.z,
+        tgt.localPos.x, tgt.localPos.y, tgt.localPos.z,
+      ])
+      geo.setAttribute('position', new THREE.BufferAttribute(pts, 3))
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+        color: src.color, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }))
+      this.group.add(line)
+      this._simLines.push(line)
+    }
+  }
+
+  // Update line positions each frame so they follow lerping nodes
+  _updateSimLines() {
+    if (!this._simLines.length || this.selectedId === null) return
+    const src = this._nodeById(this.selectedId)
+    if (!src) return
+    this._simLines.forEach((line, i) => {
+      const simId = src.p.similar[i]
+      if (simId == null) return
+      const tgt = this._nodeById(simId)
+      if (!tgt) return
+      const pos = line.geometry.attributes.position as THREE.BufferAttribute
+      pos.setXYZ(0, src.localPos.x, src.localPos.y, src.localPos.z)
+      pos.setXYZ(1, tgt.localPos.x, tgt.localPos.y, tgt.localPos.z)
+      pos.needsUpdate = true
+    })
   }
 
   addUserPlayer(p: Player) {
@@ -379,6 +474,7 @@ export class Universe {
     const lbl = document.createElement('div')
     lbl.className = 'salary-label ' + p.category
     lbl.innerHTML = this._labelHTML(p)
+    lbl.style.opacity = '0'
     this.labelLayer.appendChild(lbl)
 
     const node: Node = {
@@ -425,6 +521,7 @@ export class Universe {
       if (p.year < state.eraFrom || p.year > state.eraTo) ok = false
       if (state.source === 'added' && !p.added) ok = false
       if (state.source === 'original' && p.added) ok = false
+      if (state.source === 'fav' && !this.favorites.has(p.id)) ok = false
       if (ok && state.statRanges) {
         for (const sf in state.statRanges) {
           const r = state.statRanges[sf]
@@ -512,6 +609,7 @@ export class Universe {
     const node = id === null ? null : this._nodeById(id)
     this.onSelect(node ? node.p : null)
     if (id === null) this.clearFocus()
+    this._rebuildSimLines()
   }
 
   setHoverCardEl(el: HTMLElement) { this.hoverCardEl = el }
@@ -634,6 +732,7 @@ export class Universe {
   }
 
   _updateNode(n: Node, time: number, camPos: THREE.Vector3) {
+    void time
     const id = n.p.id
     const vis = this.visible[id]
     const hovered = id === this.hoveredId
@@ -642,7 +741,7 @@ export class Universe {
 
     if (!vis) {
       n.hit.visible = false; n._vis = false
-      if (n.label) n.label.style.opacity = '0'
+      if (n.label.style.opacity !== '0') n.label.style.opacity = '0'
       return
     }
     n.hit.visible = true
@@ -652,31 +751,41 @@ export class Universe {
       n.hit.position.copy(n.localPos)
     }
 
+    const s = this._project(n.localPos, n._proj)
+
+    // Early exit for behind-camera nodes
+    if (s.z >= 1) {
+      n._vis = false
+      if (n.label.style.opacity !== '0') n.label.style.opacity = '0'
+      return
+    }
+
     const worldPos = n.localPos.clone().applyQuaternion(this.group.quaternion)
     const camDist = worldPos.distanceTo(camPos)
-    const s = this._project(n.localPos, n._proj)
     n._screenR = 26
     n._sx = s.x; n._sy = s.y; n._camDist = camDist
     if (!n._w && n.label.offsetWidth) { n._w = n.label.offsetWidth; n._h = n.label.offsetHeight }
 
-    // keep time in use to avoid lint error
-    void time
+    const onscreen = s.x > -80 && s.x < this.W + 80 && s.y > -40 && s.y < this.H + 40
+    let op = 0
+    if (onscreen) {
+      op = Math.max(0.3, Math.min(1, (this.baseCamZ + 10 - camDist) / 26))
+      if (hovered || selected || hi) op = 1
+    }
+    n._vis = op > 0.05
+    n.label.style.opacity = String(op)
+    n.label.style.zIndex = String(Math.round(1000 - camDist) + (hovered || selected ? 4000 : 0))
+    n.label.classList.toggle('hovered', hovered)
+    n.label.classList.toggle('selected', selected || hi)
 
-    if (n.label) {
-      const onscreen = s.z < 1
-      let op = 0
-      if (onscreen) {
-        op = Math.max(0.3, Math.min(1, (this.baseCamZ + 10 - camDist) / 26))
-        if (hovered || selected || hi) op = 1
-      }
-      n._vis = op > 0.05 && onscreen
-      n.label.style.opacity = String(op)
-      n.label.style.zIndex = String(Math.round(1000 - camDist) + (hovered || selected ? 4000 : 0))
-      n.label.classList.toggle('hovered', hovered)
-      n.label.classList.toggle('selected', selected || hi)
-      if (op > 0.02) {
+    if (op > 0.02) {
+      // Only write DOM position if moved more than 0.5px
+      const dx = Math.abs(s.x - (n._lx ?? s.x + 999))
+      const dy = Math.abs(s.y - (n._ly ?? s.y + 999))
+      if (dx > 0.5 || dy > 0.5) {
         n.label.style.left = s.x + 'px'
         n.label.style.top = s.y + 'px'
+        n._lx = s.x; n._ly = s.y
       }
     }
   }
@@ -739,6 +848,7 @@ export class Universe {
     const camPos = this.camera.position
     for (const node of this.nodes) this._updateNode(node, time, camPos)
     if (this.userNode) this._updateUserNode(this.userNode, time, camPos)
+    this._updateSimLines()
 
     if (this.hoverCardEl && this.hoveredId !== null) {
       const n = this._nodeById(this.hoveredId)
@@ -759,6 +869,8 @@ export class Universe {
 
   destroy() {
     cancelAnimationFrame(this._raf)
+    for (const l of this._simLines) { this.group.remove(l); l.geometry.dispose(); (l.material as THREE.Material).dispose() }
+    this._simLines = []
     this.renderer.dispose()
   }
 }
