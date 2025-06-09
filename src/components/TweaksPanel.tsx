@@ -165,13 +165,19 @@ export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit =
 }
 
 export function TweakSelect({ label, value, options, onChange }: {
-  label: string; value: string; options: string[]; onChange: (v: string) => void
+  label: string; value: string
+  options: string[] | { value: string; label: string }[]
+  onChange: (v: string) => void
 }) {
   return (
     <div className="twk-row">
       <div className="twk-lbl"><span>{label}</span></div>
       <select className="twk-field" value={value} onChange={e => onChange(e.target.value)}>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
+        {options.map(o => {
+          const v = typeof o === 'string' ? o : o.value
+          const l = typeof o === 'string' ? o : o.label
+          return <option key={v} value={v}>{l}</option>
+        })}
       </select>
     </div>
   )

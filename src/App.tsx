@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { NBA_PLAYERS } from '../data/players'
 import type { Player } from '../data/players'
 import { Universe } from './universe'
-import { PlayerImg, NumStepper, AddPlayerModal, SalaryResultModal, estimateSalary, fmtM, eraFromYear } from './components/Modals'
+import type { AxisMap } from './universe'
+import { PlayerImg, NumStepper, AddPlayerModal, SalaryResultModal, CompareModal, estimateSalary, fmtM, eraFromYear } from './components/Modals'
 import type { SalaryResult, AddForm } from './components/Modals'
 import { useTweaks, TweaksPanel, TweakSection, TweakSlider, TweakSelect, TweakColor } from './components/TweaksPanel'
 
@@ -10,9 +11,15 @@ import { useTweaks, TweaksPanel, TweakSection, TweakSlider, TweakSelect, TweakCo
 const PLAYERS: Player[] = [...NBA_PLAYERS]
 
 const STORE_KEY = 'nba_universe_added_v2'
+const FAV_KEY = 'nba_universe_favorites_v1'
+
 function saveAdded() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(PLAYERS.filter(p => p.added))) } catch (_) {}
 }
+function loadFavs(): Set<number> {
+  try { return new Set<number>(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')) } catch { return new Set() }
+}
+
 ;(function hydrate() {
   try {
     const raw = localStorage.getItem(STORE_KEY)
@@ -21,6 +28,7 @@ function saveAdded() {
     if (Array.isArray(arr)) arr.forEach(p => { if (p?.id != null && !PLAYERS.some(x => x.id === p.id)) PLAYERS.push(p) })
   } catch (_) {}
 })()
+
 const nextId = () => PLAYERS.reduce((m, p) => Math.max(m, p.id), -1) + 1
 const pById = (id: number) => PLAYERS.find(p => p.id === id)
 
@@ -60,16 +68,40 @@ const PALETTES = [
   ['#1d8a8a', '#7b2ff7', '#7dffd0', '#ff2d9b'],
   ['#2a3fff', '#00caff', '#eef4ff', '#ff2d9b'],
 ]
+
 const LAYOUT_MAP: Record<string, string> = {
   'Stat Space': 'stats', Galaxy: 'galaxy', Positions: 'positions', Eras: 'eras', 'Pay Tiers': 'salary',
 }
-const AXIS_MEANING: Record<string, Record<string, string>> = {
-  stats: { x: 'PPG', y: 'PER', z: 'Born' },
+const LAYOUT_REVERSE: Record<string, string> = Object.fromEntries(Object.entries(LAYOUT_MAP).map(([k, v]) => [v, k]))
+
+const AXIS_OPTIONS = ['ppg', 'rpg', 'apg', 'fg', 'tp', 'ft', 'per', 'ws', 'bpm', 'salary', 'year']
+const AXIS_LABELS: Record<string, string> = {
+  ppg: 'PPG', rpg: 'RPG', apg: 'APG', fg: 'FG%', tp: '3P%', ft: 'FT%',
+  per: 'PER', ws: 'WS', bpm: 'BPM', salary: 'Salary', year: 'Year', birthYear: 'Born',
+}
+
+const STATIC_AXIS: Record<string, Record<string, string>> = {
   galaxy: { x: 'free', y: 'free', z: 'free' },
   positions: { x: 'court', y: 'height', z: 'court' },
   eras: { x: 'Year', y: 'spread', z: 'spread' },
   salary: { x: 'spread', y: 'Pay', z: 'spread' },
 }
+
+// Parse URL hash for initial state restoration
+function readHash() {
+  try {
+    const raw = window.location.hash.slice(1)
+    if (!raw) return null
+    const p = new URLSearchParams(raw)
+    return {
+      layout: p.get('layout'),
+      ax: p.get('ax'), ay: p.get('ay'), az: p.get('az'),
+      pal: p.get('pal') !== null ? parseInt(p.get('pal')!) : null,
+      player: p.get('p') !== null ? parseInt(p.get('p')!) : null,
+    }
+  } catch { return null }
+}
+const HASH_INIT = readHash()
 
 function mixHex(a: string, b: string, amt: number): string {
   const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
@@ -96,11 +128,12 @@ function applyPalette(pal: string[]): string {
 }
 
 // ---- Compass ----
-function Compass({ arrangement, shifted, onRecalibrate }: {
+function Compass({ arrangement, shifted, onRecalibrate, axisLegend }: {
   arrangement: string; shifted: boolean; onRecalibrate: () => void
+  axisLegend?: Record<string, string>
 }) {
-  const key = LAYOUT_MAP[arrangement] ?? 'stats'
-  const m = AXIS_MEANING[key] ?? AXIS_MEANING.stats
+  const key = LAYOUT_MAP[arrangement] ?? 'galaxy'
+  const m = key === 'stats' && axisLegend ? axisLegend : (STATIC_AXIS[key] ?? { x: 'PPG', y: 'PER', z: 'Born' })
   return (
     <div id="compass" className={shifted ? 'shift' : ''} onClick={onRecalibrate}
       title="Click to reset orientation">
@@ -244,7 +277,7 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
             <div className="field">
               <label>Source</label>
               <div className="pills">
-                {[['all', 'All'], ['original', 'Original'], ['added', 'Added']].map(([v, lab]) => (
+                {[['all', 'All'], ['original', 'Original'], ['added', 'Added'], ['fav', '★ Favs']].map(([v, lab]) => (
                   <div key={v} className={'pill src' + (filters.source === v ? ' on' : '')}
                     onClick={() => setFilters({ ...filters, source: v })}>{lab}</div>
                 ))}
@@ -316,9 +349,11 @@ function catWord(c: string) {
   return c === 'under' ? 'Underpaid' : c === 'over' ? 'Overpaid' : c === 'user' ? 'Your value' : 'Fair value'
 }
 
-function RightBar({ player, onClose, onPick, onDelete }: {
+function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCompare, compareMode }: {
   player: Player | null; onClose: () => void;
   onPick: (id: number) => void; onDelete: (id: number) => void
+  isFav: boolean; onFavToggle: () => void
+  onCompare: () => void; compareMode: boolean
 }) {
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -349,7 +384,17 @@ function RightBar({ player, onClose, onPick, onDelete }: {
   return (
     <div id="right" className="panel scroll open">
       <div className="rhead">
-        <div className="r-close" onClick={onClose}>✕</div>
+        {/* Action buttons row */}
+        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
+          <button className={'r-icon-btn' + (isFav ? ' fav' : '')} onClick={onFavToggle}
+            title={isFav ? 'Remove bookmark' : 'Bookmark'}>★</button>
+          {!player.added && (
+            <button className={'r-icon-btn' + (compareMode ? ' active' : '')} onClick={onCompare}
+              title="Compare with another player">↔</button>
+          )}
+          <div className="r-close" onClick={onClose}>✕</div>
+        </div>
+
         <div className="polaroid">
           <div className="pic">
             <PlayerImg player={player} size={144} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -500,20 +545,31 @@ function buildUserPlayer(form: AddForm, result: SalaryResult): Player {
 }
 
 // ---- App ----
-const TWEAK_DEFAULTS = { palette: PALETTES[0], arrangement: 'Stat Space', energy: 42 }
+const TWEAK_DEFAULTS = {
+  palette: HASH_INIT?.pal != null ? (PALETTES[HASH_INIT.pal] ?? PALETTES[0]) : PALETTES[0],
+  arrangement: HASH_INIT?.layout ? (LAYOUT_REVERSE[HASH_INIT.layout] ?? 'Stat Space') : 'Stat Space',
+  energy: 42,
+  axisX: HASH_INIT?.ax ?? 'ppg',
+  axisY: HASH_INIT?.ay ?? 'per',
+  axisZ: HASH_INIT?.az ?? 'birthYear',
+}
 
 export default function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULTS)
   const [selected, setSelected] = useState<Player | null>(null)
   const [hover, setHover] = useState<Player | null>(null)
   const [count, setCount] = useState(PLAYERS.length)
-  const [modal, setModal] = useState<null | 'add' | 'result'>(null)
+  const [modal, setModal] = useState<null | 'add' | 'result' | 'compare'>(null)
   const [result, setResult] = useState<SalaryResult | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [favorites, setFavorites] = useState<Set<number>>(loadFavs)
+  const [compareMode, setCompareMode] = useState(false)
+  const [comparePlayer, setComparePlayer] = useState<Player | null>(null)
 
   const uni = useRef<Universe | null>(null)
   const hcRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
+  const compareModeRef = useRef(false)
   const [leftOpen, setLeftOpen] = useState(true)
   const [leftPage, setLeftPage] = useState('basic')
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS)
@@ -526,10 +582,29 @@ export default function App() {
       players: PLAYERS,
       labelLayer,
       onHover: p => setHover(p),
-      onSelect: p => setSelected(p),
+      onSelect: p => {
+        if (compareModeRef.current && p) {
+          setComparePlayer(p)
+          compareModeRef.current = false
+          setCompareMode(false)
+          setModal('compare')
+        } else {
+          setSelected(p)
+        }
+      },
     })
     if (hcRef.current) uni.current.setHoverCardEl(hcRef.current)
     uni.current.setCompass(document.getElementById('compass-svg') as SVGElement | null)
+
+    // restore favorites
+    const savedFavs = loadFavs()
+    if (savedFavs.size) uni.current.setFavorites(savedFavs)
+
+    // restore selected player from hash
+    if (HASH_INIT?.player != null) {
+      const pid = HASH_INIT.player
+      setTimeout(() => uni.current?.selectById(pid), 700)
+    }
 
     const bar = document.querySelector('.loader-bar > i') as HTMLElement | null
     const loader = document.getElementById('loader')
@@ -539,16 +614,10 @@ export default function App() {
       if (bar) bar.style.width = pct + '%'
       if (pct >= 100) {
         clearInterval(iv)
-        setTimeout(() => {
-          loader?.classList.add('hide')
-          setLoaded(true)
-        }, 280)
+        setTimeout(() => { loader?.classList.add('hide'); setLoaded(true) }, 280)
       }
     }, 130)
-    return () => {
-      clearInterval(iv)
-      uni.current?.destroy()
-    }
+    return () => { clearInterval(iv); uni.current?.destroy() }
   }, [])
 
   // apply filters
@@ -558,22 +627,62 @@ export default function App() {
     setCount(c)
   }, [filters])
 
-  // apply tweaks (palette / arrangement / energy)
+  // apply tweaks (palette / arrangement / energy / axis)
+  const axisMap: AxisMap = {
+    x: (t.axisX as string) ?? 'ppg',
+    y: (t.axisY as string) ?? 'per',
+    z: (t.axisZ as string) ?? 'birthYear',
+  }
   useEffect(() => {
     if (!uni.current) return
-    const space = applyPalette(t.palette ?? PALETTES[0])
-    uni.current.setPalette((t.palette ?? PALETTES[0]).concat(['#ffffff']), space)
-    uni.current.setLayout(LAYOUT_MAP[t.arrangement] ?? 'galaxy')
+    const space = applyPalette(t.palette as string[] ?? PALETTES[0])
+    uni.current.setPalette((t.palette as string[] ?? PALETTES[0]).concat(['#ffffff']), space)
+    uni.current.setAxisMap(axisMap)
+    uni.current.setLayout(LAYOUT_MAP[t.arrangement as string] ?? 'galaxy')
     uni.current.setEnergy(((t.energy as number) ?? 42) / 100)
-  }, [t])
+  }, [t]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // hide brand on select
-  const brandHidden = !!selected
+  // write URL hash when key state changes
+  const writeHash = useCallback(() => {
+    const p = new URLSearchParams()
+    const layoutKey = LAYOUT_MAP[t.arrangement as string] ?? 'galaxy'
+    p.set('layout', layoutKey)
+    const palIdx = PALETTES.findIndex(x => JSON.stringify(x) === JSON.stringify(t.palette))
+    if (palIdx > 0) p.set('pal', String(palIdx))
+    if (axisMap.x !== 'ppg') p.set('ax', axisMap.x)
+    if (axisMap.y !== 'per') p.set('ay', axisMap.y)
+    if (axisMap.z !== 'birthYear') p.set('az', axisMap.z)
+    if (selected?.id != null) p.set('p', String(selected.id))
+    window.history.replaceState(null, '', p.toString() ? '#' + p.toString() : ' ')
+  }, [t, selected, axisMap.x, axisMap.y, axisMap.z]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { writeHash() }, [writeHash])
+
+  const toggleFav = useCallback((id: number) => {
+    setFavorites(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      try { localStorage.setItem(FAV_KEY, JSON.stringify([...next])) } catch (_) {}
+      uni.current?.setFavorites(next)
+      return next
+    })
+  }, [])
+
+  const startCompare = useCallback(() => {
+    compareModeRef.current = true
+    setCompareMode(true)
+  }, [])
+
+  const cancelCompare = useCallback(() => {
+    compareModeRef.current = false
+    setCompareMode(false)
+  }, [])
+
   void loaded
 
   const onReset = () => { setFilters(DEFAULTS()); uni.current?.recenter() }
   const onSearchEnter = () => uni.current?.focusOnSearch()
-  const closeRight = () => { setSelected(null); uni.current?.deselect() }
+  const closeRight = () => { setSelected(null); uni.current?.deselect(); cancelCompare() }
   const pickSimilar = (id: number) => uni.current?.selectById(id)
 
   const submitAdd = (form: AddForm) => {
@@ -603,8 +712,14 @@ export default function App() {
     setFilters(f => ({ ...f }))
   }
 
-  // memoize palette options for TweakColor
   const paletteOptions = useMemo(() => PALETTES, [])
+
+  // Compass legend: for stats mode use current axis labels, otherwise static
+  const compassLegend: Record<string, string> = {
+    x: AXIS_LABELS[axisMap.x] ?? axisMap.x,
+    y: AXIS_LABELS[axisMap.y] ?? axisMap.y,
+    z: AXIS_LABELS[axisMap.z] ?? axisMap.z,
+  }
 
   return (
     <>
@@ -624,10 +739,27 @@ export default function App() {
         </button>
       )}
 
-      <RightBar player={selected} onClose={closeRight} onPick={pickSimilar} onDelete={onDelete} />
+      <RightBar player={selected} onClose={closeRight} onPick={pickSimilar} onDelete={onDelete}
+        isFav={selected ? favorites.has(selected.id) : false}
+        onFavToggle={() => selected && toggleFav(selected.id)}
+        onCompare={startCompare} compareMode={compareMode} />
       <HoverCard player={hover} hostRef={hcRef} />
       <Compass arrangement={t.arrangement as string} shifted={!!selected}
-        onRecalibrate={() => uni.current?.recalibrate()} />
+        onRecalibrate={() => uni.current?.recalibrate()} axisLegend={compassLegend} />
+
+      {/* Compare mode hint overlay */}
+      {compareMode && (
+        <div style={{
+          position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 8,
+          background: 'var(--panel-2)', border: '2px solid var(--neon)', borderRadius: 12,
+          padding: '10px 20px', display: 'flex', gap: 14, alignItems: 'center',
+          fontFamily: 'var(--font-chunky)', fontSize: 15, color: '#fff',
+          boxShadow: '0 0 0 2px #000, 0 12px 30px rgba(0,0,0,0.6)',
+        }}>
+          <span style={{ color: 'var(--neon)' }}>↔ Click any player to compare</span>
+          <button className="btn btn-reset" style={{ padding: '6px 12px', fontSize: 13 }} onClick={cancelCompare}>Cancel</button>
+        </div>
+      )}
 
       <div id="fab" className={selected ? 'shift-right' : ''} title="Add yourself"
         onClick={() => setModal('add')} role="button">
@@ -636,7 +768,7 @@ export default function App() {
         </svg>
       </div>
 
-      <div id="brand-mark" className={brandHidden ? 'hide' : ''}>
+      <div id="brand-mark" className={!!selected ? 'hide' : ''}>
         <div className="bm-logo"><span className="ball">🏀</span> NBA UNIVERSE</div>
         <div className="bm-tag">How much are YOU worth</div>
       </div>
@@ -647,6 +779,10 @@ export default function App() {
       {modal === 'result' && result && (
         <SalaryResultModal result={result} onClose={() => setModal(null)} onView={viewMyself} />
       )}
+      {modal === 'compare' && selected && comparePlayer && (
+        <CompareModal playerA={selected} playerB={comparePlayer}
+          onClose={() => { setModal(null); setComparePlayer(null) }} />
+      )}
 
       <TweaksPanel title="Tweaks">
         <TweakSection label="Court Palette" />
@@ -656,6 +792,17 @@ export default function App() {
         <TweakSelect label="Layout" value={t.arrangement as string}
           options={['Stat Space', 'Galaxy', 'Positions', 'Eras', 'Pay Tiers']}
           onChange={v => setTweak('arrangement', v)} />
+        {(t.arrangement as string) === 'Stat Space' && <>
+          <TweakSelect label="X axis" value={t.axisX as string}
+            options={AXIS_OPTIONS.map(o => ({ value: o, label: AXIS_LABELS[o] ?? o }))}
+            onChange={v => setTweak('axisX', v)} />
+          <TweakSelect label="Y axis" value={t.axisY as string}
+            options={AXIS_OPTIONS.map(o => ({ value: o, label: AXIS_LABELS[o] ?? o }))}
+            onChange={v => setTweak('axisY', v)} />
+          <TweakSelect label="Z axis" value={t.axisZ as string}
+            options={AXIS_OPTIONS.map(o => ({ value: o, label: AXIS_LABELS[o] ?? o }))}
+            onChange={v => setTweak('axisZ', v)} />
+        </>}
         <TweakSection label="Motion" />
         <TweakSlider label="Energy" value={t.energy as number} min={0} max={100} unit="%"
           onChange={v => setTweak('energy', v)} />
