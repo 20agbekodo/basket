@@ -387,3 +387,133 @@ export function SalaryResultModal({ result, onClose, onView }: {
     </div>
   )
 }
+
+// ---- COMPARE MODAL ----
+const RADAR_STATS: { key: keyof Player; label: string; max: number }[] = [
+  { key: 'ppg', label: 'PPG', max: 40 },
+  { key: 'rpg', label: 'RPG', max: 20 },
+  { key: 'apg', label: 'APG', max: 15 },
+  { key: 'per', label: 'PER', max: 35 },
+  { key: 'ws', label: 'WS', max: 20 },
+  { key: 'bpm', label: 'BPM', max: 23 },  // shifted: range -8..15 → 0..23
+]
+
+function radarVal(p: Player, key: keyof Player, max: number): number {
+  const raw = key === 'bpm' ? (p.bpm + 8) : (p[key] as number)
+  return Math.min(1, Math.max(0, raw / max))
+}
+
+export function CompareModal({ playerA, playerB, onClose }: {
+  playerA: Player; playerB: Player; onClose: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return
+    const ctx = c.getContext('2d')!
+    const W = c.width, H = c.height, cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.37
+    const N = RADAR_STATS.length
+    ctx.clearRect(0, 0, W, H)
+
+    for (let r = 1; r <= 4; r++) {
+      ctx.beginPath()
+      ctx.strokeStyle = `rgba(255,255,255,${r === 4 ? 0.22 : 0.1})`
+      ctx.lineWidth = 1
+      RADAR_STATS.forEach((_s, i) => {
+        const a = (i / N) * Math.PI * 2 - Math.PI / 2
+        const pr = (r / 4) * R
+        if (i === 0) ctx.moveTo(cx + Math.cos(a) * pr, cy + Math.sin(a) * pr)
+        else ctx.lineTo(cx + Math.cos(a) * pr, cy + Math.sin(a) * pr)
+      })
+      ctx.closePath(); ctx.stroke()
+    }
+
+    RADAR_STATS.forEach(({ label }, i) => {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2
+      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1
+      ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke()
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '11px Archivo,sans-serif'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(label, cx + Math.cos(a) * (R + 18), cy + Math.sin(a) * (R + 18))
+    })
+
+    const drawPoly = (p: Player, fill: string, stroke: string) => {
+      ctx.beginPath()
+      RADAR_STATS.forEach(({ key, max }, i) => {
+        const v = radarVal(p, key, max)
+        const a = (i / N) * Math.PI * 2 - Math.PI / 2
+        if (i === 0) ctx.moveTo(cx + Math.cos(a) * v * R, cy + Math.sin(a) * v * R)
+        else ctx.lineTo(cx + Math.cos(a) * v * R, cy + Math.sin(a) * v * R)
+      })
+      ctx.closePath()
+      ctx.fillStyle = fill; ctx.fill()
+      ctx.strokeStyle = stroke; ctx.lineWidth = 2.5; ctx.stroke()
+    }
+    drawPoly(playerA, 'rgba(0,224,199,0.18)', '#00e0c7')
+    drawPoly(playerB, 'rgba(255,45,155,0.18)', '#ff2d9b')
+  }, [playerA, playerB])
+
+  const DIFF_STATS: [string, keyof Player][] = [
+    ['PPG', 'ppg'], ['RPG', 'rpg'], ['APG', 'apg'],
+    ['FG%', 'fg'], ['3P%', 'tp'], ['FT%', 'ft'],
+    ['PER', 'per'], ['WS', 'ws'], ['BPM', 'bpm'],
+  ]
+
+  return (
+    <div className="modal-scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal compare-modal" style={{ maxWidth: 600 }}>
+        <div className="modal-head">
+          <h2>Comparison</h2>
+          <div className="r-close" onClick={onClose}>✕</div>
+        </div>
+        <div className="modal-body" style={{ padding: '0 24px 24px' }}>
+
+          <div className="cmp-players">
+            {([playerA, playerB] as const).map((p, i) => (
+              <div className="cmp-player" key={p.id}>
+                <div className="polaroid" style={{ transform: `rotate(${i === 0 ? -3 : 2.5}deg)` }}>
+                  <div className="pic"><PlayerImg player={p} size={90} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
+                  <div className="cap">{p.team}</div>
+                </div>
+                <div className={'cmp-pname ' + (i === 0 ? 'teal' : 'pink')}>{p.name}</div>
+                <div className="cmp-pmeta">{p.pos} · {p.era}</div>
+              </div>
+            ))}
+          </div>
+
+          <canvas ref={canvasRef} width={240} height={240} style={{ display: 'block', margin: '0 auto 6px' }} />
+          <div className="cmp-legend-row">
+            <span className="cmp-dot teal" /><span>{playerA.name}</span>
+            <span className="cmp-dot pink" /><span>{playerB.name}</span>
+          </div>
+
+          <div className="cmp-table">
+            {DIFF_STATS.map(([label, key]) => {
+              const a = playerA[key] as number, b = playerB[key] as number
+              return (
+                <div className="cmp-row" key={label}>
+                  <span className={'cmp-cell teal' + (a > b ? ' win' : '')}>{a}</span>
+                  <span className="cmp-lbl">{label}</span>
+                  <span className={'cmp-cell pink' + (b > a ? ' win' : '')}>{b}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="cmp-salary">
+            {([playerA, playerB] as const).map((p, i) => (
+              <div key={p.id} className={'cmp-sal ' + (i === 0 ? 'teal' : 'pink')}>
+                <div className="s">{fmtM(p.salary)}</div>
+                <div className="lbl">Best-year salary</div>
+                <div className={`hc-badge ${p.category}`}>
+                  {p.category === 'under' ? 'Underpaid' : p.category === 'over' ? 'Overpaid' : 'Fair'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+}
