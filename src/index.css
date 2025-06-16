@@ -645,6 +645,66 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .reveal-step { animation: revUp 0.5s both; }
 @keyframes revUp { from { opacity: 0; transform: translateY(18px); } }
 
+/* ---- Icon buttons in right panel header ---- */
+.r-icon-btn {
+  appearance: none; border: 2px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3);
+  color: rgba(255,255,255,0.5); width: 30px; height: 30px; border-radius: 8px;
+  cursor: pointer; font-size: 16px; line-height: 1; display: flex; align-items: center;
+  justify-content: center; transition: all 0.15s;
+}
+.r-icon-btn:hover { border-color: var(--neon); color: var(--neon); }
+.r-icon-btn.fav { color: #eaff2b; border-color: #eaff2b; background: rgba(234,255,43,0.12); }
+.r-icon-btn.active { color: var(--teal); border-color: var(--teal); background: rgba(0,224,199,0.12); }
+
+/* ---- salary label fav indicator ---- */
+.salary-label.fav .sln { color: #eaff2b !important; }
+
+/* ---- Compare modal ---- */
+.compare-modal .modal-body { padding: 0 24px 24px; }
+.cmp-players { display: flex; gap: 24px; justify-content: center; align-items: flex-end; padding: 20px 0 12px; }
+.cmp-player { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.cmp-pname { font-family: var(--font-display); font-size: 18px; text-align: center; }
+.cmp-pname.teal { color: var(--teal); text-shadow: 1px 1px 0 rgba(0,0,0,0.5); }
+.cmp-pname.pink { color: var(--pink); text-shadow: 1px 1px 0 rgba(0,0,0,0.5); }
+.cmp-pmeta { font-family: var(--font-body); font-size: 12px; color: var(--ink-dim); }
+
+.cmp-legend-row {
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  font-family: var(--font-body); font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 12px;
+}
+.cmp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 2px; }
+.cmp-dot.teal { background: var(--teal); box-shadow: 0 0 6px var(--teal); }
+.cmp-dot.pink { background: var(--pink); box-shadow: 0 0 6px var(--pink); margin-left: 14px; }
+
+.cmp-table {
+  width: 100%; max-width: 360px; margin: 8px auto 16px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.cmp-row {
+  display: grid; grid-template-columns: 1fr 60px 1fr; gap: 6px; align-items: center;
+  padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.04);
+}
+.cmp-lbl { text-align: center; font-family: var(--font-chunky); font-size: 11px; color: var(--ink-dim); letter-spacing: 0.5px; }
+.cmp-cell { text-align: center; font-family: var(--font-pixel); font-size: 17px; color: rgba(255,255,255,0.5); }
+.cmp-cell.teal { text-align: right; }
+.cmp-cell.pink { text-align: left; }
+.cmp-cell.win { color: #fff; font-size: 19px; }
+.cmp-cell.teal.win { color: var(--teal); }
+.cmp-cell.pink.win { color: var(--pink); }
+
+.cmp-salary {
+  display: flex; gap: 12px; justify-content: center; margin-top: 8px;
+}
+.cmp-sal {
+  flex: 1; max-width: 200px; text-align: center; padding: 14px 16px; border-radius: 12px;
+  background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; gap: 5px; align-items: center;
+}
+.cmp-sal.teal { border-color: rgba(0,224,199,0.35); }
+.cmp-sal.pink { border-color: rgba(255,45,155,0.35); }
+.cmp-sal .s { font-family: var(--font-pixel); font-size: 26px; color: #fff; }
+.cmp-sal .lbl { font-family: var(--font-body); font-size: 11px; color: var(--ink-dim); }
+
 @media (max-width: 820px) {
   #left { width: 240px; }
   #right { width: 300px; }
