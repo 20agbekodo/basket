@@ -562,7 +562,8 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [favorites, setFavorites] = useState<Set<number>>(loadFavs)
   const [compareMode, setCompareMode] = useState(false)
-  const [comparePlayer, setComparePlayer] = useState<Player | null>(null)
+  const [comparePlayerA, setComparePlayerA] = useState<Player | null>(null)
+  const [comparePlayerB, setComparePlayerB] = useState<Player | null>(null)
 
   const uni = useRef<Universe | null>(null)
   const hcRef = useRef<HTMLDivElement | null>(null)
@@ -582,7 +583,7 @@ export default function App() {
       onHover: p => setHover(p),
       onSelect: p => {
         if (compareModeRef.current && p) {
-          setComparePlayer(p)
+          setComparePlayerB(p)
           compareModeRef.current = false
           setCompareMode(false)
           setModal('compare')
@@ -667,9 +668,10 @@ export default function App() {
   }, [])
 
   const startCompare = useCallback(() => {
+    setComparePlayerA(selected)
     compareModeRef.current = true
     setCompareMode(true)
-  }, [])
+  }, [selected])
 
   const cancelCompare = useCallback(() => {
     compareModeRef.current = false
@@ -777,9 +779,9 @@ export default function App() {
       {modal === 'result' && result && (
         <SalaryResultModal result={result} onClose={() => setModal(null)} onView={viewMyself} />
       )}
-      {modal === 'compare' && selected && comparePlayer && (
-        <CompareModal playerA={selected} playerB={comparePlayer}
-          onClose={() => { setModal(null); setComparePlayer(null) }} />
+      {modal === 'compare' && comparePlayerA && comparePlayerB && (
+        <CompareModal playerA={comparePlayerA} playerB={comparePlayerB}
+          onClose={() => { setModal(null); setComparePlayerA(null); setComparePlayerB(null) }} />
       )}
 
       <TweaksPanel title="Tweaks">
