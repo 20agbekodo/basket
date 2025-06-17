@@ -385,14 +385,12 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
     <div id="right" className="panel scroll open">
       <div className="rhead">
         {/* Action buttons row */}
-        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
+        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
           <button className={'r-icon-btn' + (isFav ? ' fav' : '')} onClick={onFavToggle}
             title={isFav ? 'Remove bookmark' : 'Bookmark'}>★</button>
-          {!player.added && (
-            <button className={'r-icon-btn' + (compareMode ? ' active' : '')} onClick={onCompare}
-              title="Compare with another player">↔</button>
-          )}
-          <div className="r-close" onClick={onClose}>✕</div>
+          <button className={'r-icon-btn' + (compareMode ? ' active' : '')} onClick={onCompare}
+            title="Compare with another player">↔</button>
+          <div className="r-close" style={{ position: 'static' }} onClick={onClose}>✕</div>
         </div>
 
         <div className="polaroid">

@@ -118,6 +118,7 @@ html, body {
   box-shadow: 0 0 9px -1px currentColor, 0 3px 8px rgba(0,0,0,0.5);
   text-shadow: 0 0 6px currentColor;
   will-change: transform, opacity; transition: opacity 0.18s, box-shadow 0.15s;
+  pointer-events: none;
 }
 .salary-label.hovered, .salary-label.selected {
   transform: translate(-50%, -50%) scale(1.16); border-width: 2px;
