@@ -127,16 +127,35 @@ function applyPalette(pal: string[]): string {
   return s0
 }
 
+// ---- Global tooltip ----
+interface TipState { text: string; x: number; y: number }
+
+function AppTooltip({ tip }: { tip: TipState | null }) {
+  if (!tip) return null
+  const above = tip.y > 52
+  return (
+    <div className="app-tooltip" style={{
+      left: tip.x,
+      top: above ? tip.y - 10 : tip.y + 28,
+      transform: above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+    }}>
+      {tip.text}
+    </div>
+  )
+}
+
 // ---- Compass ----
-function Compass({ arrangement, shifted, onRecalibrate, axisLegend }: {
+function Compass({ arrangement, shifted, onRecalibrate, axisLegend, onTip, onTipLeave }: {
   arrangement: string; shifted: boolean; onRecalibrate: () => void
   axisLegend?: Record<string, string>
+  onTip: (text: string, e: React.MouseEvent) => void
+  onTipLeave: () => void
 }) {
   const key = LAYOUT_MAP[arrangement] ?? 'galaxy'
   const m = key === 'stats' && axisLegend ? axisLegend : (STATIC_AXIS[key] ?? { x: 'PPG', y: 'PER', z: 'Born' })
   return (
     <div id="compass" className={shifted ? 'shift' : ''} onClick={onRecalibrate}
-      title="Click to reset orientation">
+      onMouseEnter={e => onTip('Click to reset orientation', e)} onMouseLeave={onTipLeave}>
       <svg id="compass-svg" viewBox="0 0 100 100">
         <circle className="cmp-ring" cx="50" cy="50" r="40" />
         <g data-axis="z" className="ax z">
@@ -349,24 +368,15 @@ function catWord(c: string) {
   return c === 'under' ? 'Underpaid' : c === 'over' ? 'Overpaid' : c === 'user' ? 'Your value' : 'Fair value'
 }
 
-function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCompare, compareMode }: {
+function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCompare, compareMode, onTip, onTipMove, onTipLeave }: {
   player: Player | null; onClose: () => void;
   onPick: (id: number) => void; onDelete: (id: number) => void
   isFav: boolean; onFavToggle: () => void
   onCompare: () => void; compareMode: boolean
+  onTip: (text: string, e: React.MouseEvent) => void
+  onTipMove: (e: React.MouseEvent) => void
+  onTipLeave: () => void
 }) {
-  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
-  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const showTip = (e: React.MouseEvent<HTMLDivElement>, text: string) => {
-    clearTimeout(tipTimer.current ?? undefined)
-    const el = e.currentTarget
-    tipTimer.current = setTimeout(() => {
-      const r = el.getBoundingClientRect()
-      setTip({ text, x: r.left + r.width / 2, y: r.top - 8 })
-    }, 500)
-  }
-  const hideTip = () => { clearTimeout(tipTimer.current ?? undefined); setTip(null) }
 
   if (!player) return <div id="right" className="panel" />
 
@@ -386,10 +396,12 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
       <div className="rhead">
         <button className={'r-icon-btn' + (isFav ? ' fav' : '')}
           style={{ position: 'absolute', top: 10, left: 12 }}
-          onClick={onFavToggle} title={isFav ? 'Remove bookmark' : 'Bookmark'}>★</button>
+          onClick={onFavToggle}
+          onMouseEnter={e => onTip(isFav ? 'Remove bookmark' : 'Bookmark', e)}
+          onMouseLeave={onTipLeave}>★</button>
         <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, alignItems: 'center' }}>
           <button className={'r-icon-btn' + (compareMode ? ' active' : '')} onClick={onCompare}
-            title="Compare with another player">↔</button>
+            onMouseEnter={e => onTip('Compare with another player', e)} onMouseLeave={onTipLeave}>↔</button>
           <div className="r-close" style={{ position: 'static' }} onClick={onClose}>✕</div>
         </div>
 
@@ -416,7 +428,9 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
         <div className="stat-grid">
           {stats.map(([k, v]) => (
             <div className="stat-cell" key={k}
-              onMouseEnter={e => showTip(e, STAT_FULL[k] ?? k)} onMouseLeave={hideTip}>
+              onMouseEnter={e => onTip(STAT_FULL[k] ?? k, e)}
+              onMouseMove={onTipMove}
+              onMouseLeave={onTipLeave}>
               <div className="v">{v}</div><div className="k">{k}</div>
             </div>
           ))}
@@ -462,9 +476,6 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
           </button>
         )}
       </div>
-      {tip && (
-        <div className="stat-tip" style={{ left: tip.x, top: tip.y }}>{tip.text}</div>
-      )}
     </div>
   )
 }
@@ -564,6 +575,22 @@ export default function App() {
   const [compareMode, setCompareMode] = useState(false)
   const [comparePlayerA, setComparePlayerA] = useState<Player | null>(null)
   const [comparePlayerB, setComparePlayerB] = useState<Player | null>(null)
+
+  const [tip, setTip] = useState<TipState | null>(null)
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const onTip = useCallback((text: string, e: React.MouseEvent) => {
+    clearTimeout(tipTimer.current ?? undefined)
+    const { clientX, clientY } = e
+    tipTimer.current = setTimeout(() => setTip({ text, x: clientX, y: clientY }), 300)
+  }, [])
+  const onTipMove = useCallback((e: React.MouseEvent) => {
+    setTip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)
+  }, [])
+  const onTipLeave = useCallback(() => {
+    clearTimeout(tipTimer.current ?? undefined)
+    setTip(null)
+  }, [])
 
   const uni = useRef<Universe | null>(null)
   const hcRef = useRef<HTMLDivElement | null>(null)
@@ -731,7 +758,8 @@ export default function App() {
         <button id="left-expand" onClick={() => {
           setLeftOpen(true); setLeftPage('basic')
           setTimeout(() => searchRef.current?.focus(), 80)
-        }} title="Show filters">
+        }}
+        onMouseEnter={e => onTip('Show filters', e)} onMouseLeave={onTipLeave}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -742,15 +770,17 @@ export default function App() {
       <RightBar player={selected} onClose={closeRight} onPick={pickSimilar} onDelete={onDelete}
         isFav={selected ? favorites.has(selected.id) : false}
         onFavToggle={() => selected && toggleFav(selected.id)}
-        onCompare={startCompare} compareMode={compareMode} />
+        onCompare={startCompare} compareMode={compareMode}
+        onTip={onTip} onTipMove={onTipMove} onTipLeave={onTipLeave} />
       <HoverCard player={hover} hostRef={hcRef} />
       <Compass arrangement={t.arrangement as string} shifted={!!selected}
-        onRecalibrate={() => uni.current?.recalibrate()} axisLegend={compassLegend} />
+        onRecalibrate={() => uni.current?.recalibrate()} axisLegend={compassLegend}
+        onTip={onTip} onTipLeave={onTipLeave} />
 
-      {/* Compare mode hint overlay */}
+      {/* Compare mode hint overlay — stacked above the nav-hint (bottom: 14px ~32px tall) */}
       {compareMode && (
         <div style={{
-          position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 8,
+          position: 'fixed', bottom: 62, left: '50%', transform: 'translateX(-50%)', zIndex: 8,
           background: 'var(--panel-2)', border: '2px solid var(--neon)', borderRadius: 12,
           padding: '10px 20px', display: 'flex', gap: 14, alignItems: 'center',
           fontFamily: 'var(--font-chunky)', fontSize: 15, color: '#fff',
@@ -761,8 +791,9 @@ export default function App() {
         </div>
       )}
 
-      <div id="fab" className={selected ? 'shift-right' : ''} title="Add yourself"
-        onClick={() => setModal('add')} role="button">
+      <div id="fab" className={selected ? 'shift-right' : ''}
+        onClick={() => setModal('add')} role="button"
+        onMouseEnter={e => onTip('Add yourself to the universe', e)} onMouseLeave={onTipLeave}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
           <path d="M12 5v14M5 12h14" />
         </svg>
@@ -807,6 +838,7 @@ export default function App() {
         <TweakSlider label="Energy" value={t.energy as number} min={0} max={100} unit="%"
           onChange={v => setTweak('energy', v)} />
       </TweaksPanel>
+      <AppTooltip tip={tip} />
     </>
   )
 }
