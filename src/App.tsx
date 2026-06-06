@@ -145,17 +145,31 @@ function AppTooltip({ tip }: { tip: TipState | null }) {
 }
 
 // ---- Compass ----
-function Compass({ arrangement, shifted, onRecalibrate, axisLegend, onTip, onTipLeave }: {
+function Compass({ arrangement, shifted, onRecalibrate, axisLegend, onTip, onTipLeave, mobileOpen, onMobileToggle }: {
   arrangement: string; shifted: boolean; onRecalibrate: () => void
   axisLegend?: Record<string, string>
   onTip: (text: string, e: React.MouseEvent) => void
   onTipLeave: () => void
+  mobileOpen: boolean
+  onMobileToggle: () => void
 }) {
   const key = LAYOUT_MAP[arrangement] ?? 'galaxy'
   const m = key === 'stats' && axisLegend ? axisLegend : (STATIC_AXIS[key] ?? { x: 'PPG', y: 'PER', z: 'Born' })
+
+  const handleClick = () => {
+    if (window.innerWidth <= 768 && !mobileOpen) {
+      onMobileToggle()
+    } else {
+      onRecalibrate()
+    }
+  }
+
   return (
-    <div id="compass" className={shifted ? 'shift' : ''} onClick={onRecalibrate}
+    <div id="compass"
+      className={[shifted ? 'shift' : '', mobileOpen ? 'mob-open' : ''].filter(Boolean).join(' ')}
+      onClick={handleClick}
       onMouseEnter={e => onTip('Click to reset orientation', e)} onMouseLeave={onTipLeave}>
+      <button className="compass-mob-x" onClick={e => { e.stopPropagation(); onMobileToggle() }}>✕</button>
       <svg id="compass-svg" viewBox="0 0 100 100">
         <circle className="cmp-ring" cx="50" cy="50" r="40" />
         <g data-axis="z" className="ax z">
@@ -244,13 +258,27 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
   page: string; setPage: (p: string) => void;
   searchRef: React.RefObject<HTMLInputElement | null>
 }) {
+  const touchRef = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchRef.current) return
+    const dx = e.changedTouches[0].clientX - touchRef.current.x
+    const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.y)
+    touchRef.current = null
+    if (dx < -60 && dy < 80) onCollapse()
+  }
+
   const togglePos = (pos: string) => {
     const next = new Set(filters.positions)
     next.has(pos) ? next.delete(pos) : next.add(pos)
     setFilters({ ...filters, positions: next })
   }
   return (
-    <div id="left" className={'panel' + (collapsed ? ' collapsed' : '')}>
+    <div id="left" className={'panel' + (collapsed ? ' collapsed' : '')}
+      onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={'left-pages' + (page === 'advanced' ? ' adv' : '')}>
 
         {/* BASIC PAGE */}
@@ -261,6 +289,7 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
             {page === 'basic' && (
               <button className="left-collapse" onClick={onCollapse} title="Collapse">«</button>
             )}
+            <button className="left-mobile-close" onClick={onCollapse} title="Close">✕</button>
           </div>
           <div className="body">
             <div className="field">
@@ -343,7 +372,10 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
           <div className="body">
             <div className="field" style={{ marginTop: 6 }}>
               <label>Filter by stat range</label>
-              <div className="hint">drag the handles or type exact values</div>
+              <div className="hint">
+                <span className="hint-desktop">drag the handles or type exact values</span>
+                <span className="hint-mobile">slide the handles or type exact values</span>
+              </div>
             </div>
             {STAT_DEFS.map(d => <StatRow key={d.field} def={d} filters={filters} setFilters={setFilters} />)}
             <div className="field">
@@ -377,6 +409,18 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
   onTipMove: (e: React.MouseEvent) => void
   onTipLeave: () => void
 }) {
+  const touchRef = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchRef.current) return
+    const dy = e.changedTouches[0].clientY - touchRef.current.y
+    const dx = Math.abs(e.changedTouches[0].clientX - touchRef.current.x)
+    touchRef.current = null
+    if (dy > 80 && dx < 80) onClose()
+  }
 
   if (!player) return <div id="right" className="panel" />
 
@@ -392,7 +436,9 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
       : (player.category === 'under' ? 'Underpaid by ' : 'Overpaid by ') + fmtM(Math.abs(player.delta))
 
   return (
-    <div id="right" className="panel scroll open">
+    <div id="right" className="panel scroll open"
+      onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div className="right-drag-handle" />
       <div className="rhead">
         <button className={'r-icon-btn' + (isFav ? ' fav' : '')}
           style={{ position: 'absolute', top: 10, left: 12 }}
@@ -575,6 +621,7 @@ export default function App() {
   const [compareMode, setCompareMode] = useState(false)
   const [comparePlayerA, setComparePlayerA] = useState<Player | null>(null)
   const [comparePlayerB, setComparePlayerB] = useState<Player | null>(null)
+  const [compassOpen, setCompassOpen] = useState(false)
 
   const [tip, setTip] = useState<TipState | null>(null)
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -698,6 +745,11 @@ export default function App() {
     setComparePlayerA(selected)
     compareModeRef.current = true
     setCompareMode(true)
+    // On mobile the right panel covers the canvas — close it so the user can tap a player
+    if (window.innerWidth <= 768) {
+      setSelected(null)
+      uni.current?.deselect()
+    }
   }, [selected])
 
   const cancelCompare = useCallback(() => {
@@ -750,6 +802,9 @@ export default function App() {
 
   return (
     <>
+      {/* Left panel scrim on mobile */}
+      {leftOpen && <div className="left-mobile-scrim" onClick={() => setLeftOpen(false)} />}
+
       {leftOpen ? (
         <LeftBar filters={filters} setFilters={setFilters} count={count} onReset={onReset}
           onSearchEnter={onSearchEnter} collapsed={false} onCollapse={() => setLeftOpen(false)}
@@ -775,18 +830,16 @@ export default function App() {
       <HoverCard player={hover} hostRef={hcRef} />
       <Compass arrangement={t.arrangement as string} shifted={!!selected}
         onRecalibrate={() => uni.current?.recalibrate()} axisLegend={compassLegend}
-        onTip={onTip} onTipLeave={onTipLeave} />
+        onTip={onTip} onTipLeave={onTipLeave}
+        mobileOpen={compassOpen} onMobileToggle={() => setCompassOpen(o => !o)} />
 
-      {/* Compare mode hint overlay — stacked above the nav-hint (bottom: 14px ~32px tall) */}
+      {/* Compare mode hint overlay */}
       {compareMode && (
-        <div style={{
-          position: 'fixed', bottom: 62, left: '50%', transform: 'translateX(-50%)', zIndex: 8,
-          background: 'var(--panel-2)', border: '2px solid var(--neon)', borderRadius: 12,
-          padding: '10px 20px', display: 'flex', gap: 14, alignItems: 'center',
-          fontFamily: 'var(--font-chunky)', fontSize: 15, color: '#fff',
-          boxShadow: '0 0 0 2px #000, 0 12px 30px rgba(0,0,0,0.6)',
-        }}>
-          <span style={{ color: 'var(--neon)' }}>↔ Click any player to compare</span>
+        <div className="compare-hint">
+          <span style={{ color: 'var(--neon)' }}>
+            <span className="hint-desktop">↔ Click any player to compare</span>
+            <span className="hint-mobile">↔ Tap any player to compare</span>
+          </span>
           <button className="btn btn-reset" style={{ padding: '6px 12px', fontSize: 13 }} onClick={cancelCompare}>Cancel</button>
         </div>
       )}
@@ -798,6 +851,12 @@ export default function App() {
           <path d="M12 5v14M5 12h14" />
         </svg>
       </div>
+
+      {/* Mobile tweaks button */}
+      <button id="mobile-tweaks-btn"
+        onClick={() => window.postMessage({ type: '__activate_edit_mode' }, '*')}>
+        ⚙
+      </button>
 
       <div id="brand-mark" className={!!selected ? 'hide' : ''}>
         <div className="bm-logo"><span className="ball">🏀</span> NBA UNIVERSE</div>

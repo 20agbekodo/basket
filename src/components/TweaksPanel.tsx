@@ -51,6 +51,10 @@ const TWEAKS_STYLE = `
   .twk-chip>span>i:first-child{box-shadow:none}
   .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
     filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
+  @media(max-width:768px){
+    .twk-panel{position:fixed;inset:0;width:100%!important;max-height:100vh!important;
+      border-radius:0!important;right:0!important;bottom:0!important;left:0!important;top:0!important}
+  }
 `
 
 function isLight(hex: string): boolean {
@@ -137,7 +141,7 @@ export function TweaksPanel({ title = 'Tweaks', children }: { title?: string; ch
   return (
     <>
       <style>{TWEAKS_STYLE}</style>
-      <div ref={dragRef} className="twk-panel" style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+      <div ref={dragRef} className="twk-panel" style={window.innerWidth > 768 ? { right: offsetRef.current.x, bottom: offsetRef.current.y } : {}}>
         <div className="twk-hd" onMouseDown={onDragStart}>
           <b>{title}</b>
           <button className="twk-x" onClick={() => { setOpen(false); window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*') }}>✕</button>

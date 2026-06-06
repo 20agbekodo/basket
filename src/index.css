@@ -723,3 +723,152 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   #left { width: 240px; }
   #right { width: 300px; }
 }
+
+/* ======= SHARED MOBILE-ONLY ELEMENTS (hidden on desktop) ======= */
+
+.hint-mobile { display: none; }
+
+/* Mobile left panel close button */
+.left-mobile-close {
+  display: none;
+  position: absolute; top: 12px; right: 12px; z-index: 2;
+  width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+  background: rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.2);
+  color: #fff; font-size: 16px; line-height: 1;
+  align-items: center; justify-content: center; appearance: none;
+}
+
+/* Drag handle at top of right bottom sheet */
+.right-drag-handle {
+  display: none;
+  width: 40px; height: 5px; border-radius: 999px;
+  background: rgba(255,255,255,0.25);
+  margin: 12px auto 4px; flex: none;
+}
+
+/* Compass collapse button */
+.compass-mob-x {
+  display: none;
+  position: absolute; top: 4px; left: 4px; z-index: 1;
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.7); font-size: 11px; line-height: 1;
+  align-items: center; justify-content: center; appearance: none;
+}
+
+/* Mobile tweaks button */
+#mobile-tweaks-btn { display: none; }
+
+/* Compare hint — position overridden on mobile */
+.compare-hint {
+  position: fixed; bottom: 62px; left: 50%; transform: translateX(-50%); z-index: 8;
+  background: var(--panel-2); border: 2px solid var(--neon); border-radius: 12px;
+  padding: 10px 20px; display: flex; gap: 14px; align-items: center;
+  font-family: var(--font-chunky); font-size: 15px; color: #fff;
+  box-shadow: 0 0 0 2px #000, 0 12px 30px rgba(0,0,0,0.6);
+}
+
+/* Mobile scrim behind left panel — hidden on desktop */
+.left-mobile-scrim { display: none; }
+
+/* ======= MOBILE ======= */
+@media (max-width: 768px) {
+
+  /* Nav hint */
+  .hint-desktop { display: none; }
+  .hint-mobile { display: inline; }
+
+  /* Disable hover-only features */
+  #hovercard { display: none !important; }
+  .app-tooltip { display: none !important; }
+  #brand-mark { display: none; }
+
+  /* ---- LEFT PANEL → full-screen modal ---- */
+  #left {
+    left: 0; top: 0; bottom: 0;
+    width: 100% !important;
+    border-radius: 0;
+    z-index: 10;
+    animation: slideInLeft 0.35s cubic-bezier(.2,.8,.2,1) both;
+  }
+  /* Suppress slide-in animation when collapsing via the desktop class */
+  #left.collapsed { animation: none; }
+
+  @keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0.6; }
+    to   { transform: translateX(0);     opacity: 1; }
+  }
+
+  .left-collapse { display: none !important; }
+  .left-mobile-close { display: flex; }
+  .left-mobile-close:active { background: var(--pink); border-color: #fff; }
+
+  .left-mobile-scrim {
+    display: block;
+    position: fixed; inset: 0; z-index: 9;
+    background: rgba(0,0,0,0.55);
+    animation: fade 0.2s ease both;
+  }
+
+  /* ---- RIGHT PANEL → bottom sheet ---- */
+  #right {
+    top: auto !important;
+    right: 0; left: 0; bottom: 0;
+    width: 100% !important;
+    border-radius: 20px 20px 0 0;
+    max-height: 88vh;
+    /* slide up from bottom instead of from the right */
+    transform: translateY(100%);
+    opacity: 1;
+    overflow: hidden;
+    transition: transform 0.38s cubic-bezier(.2,.8,.2,1);
+    display: flex; flex-direction: column;
+  }
+  #right.open { transform: translateY(0); }
+
+  /* Fixed header + scrollable body inside the sheet */
+  #right .rhead { flex: none; }
+  #right .rbody {
+    overflow-y: auto; flex: 1;
+    scrollbar-width: thin; scrollbar-color: var(--purple) transparent;
+  }
+
+  .right-drag-handle { display: block; }
+
+  /* Compact polaroid on small screens */
+  #right .polaroid { width: 130px; }
+  #right .polaroid .pic { width: 108px; height: 108px; }
+
+  /* ---- COMPASS → small by default, tap to expand ---- */
+  #compass { width: 60px; position: relative; }
+  #compass.shift { right: 20px; } /* don't shift away — right panel is a bottom sheet */
+  #compass .cmp-reset { display: none; }
+  #compass .cmp-legend { display: none; }
+  #compass-svg { width: 60px; height: 60px; }
+
+  #compass.mob-open { width: 116px; }
+  #compass.mob-open .cmp-reset { display: block; }
+  #compass.mob-open .cmp-legend { display: flex; }
+  #compass.mob-open .compass-mob-x { display: flex; }
+  .compass-mob-x { display: none; } /* shown only inside mob-open above */
+
+  /* ---- FAB — no shift on mobile (right panel is full-height) ---- */
+  #fab { width: 56px; height: 56px; right: 16px; bottom: 16px; }
+  #fab.shift-right { right: 16px; }
+
+  /* ---- COMPARE HINT → move to top so it doesn't clash with FAB ---- */
+  .compare-hint { bottom: auto; top: 16px; font-size: 13px; padding: 8px 16px; }
+
+  /* ---- MOBILE TWEAKS BUTTON ---- */
+  #mobile-tweaks-btn {
+    display: flex;
+    position: fixed; left: 16px; bottom: 16px; z-index: 7;
+    width: 48px; height: 48px; border-radius: 14px; cursor: pointer;
+    background: var(--panel); border: 2px solid var(--panel-line);
+    color: var(--teal); font-size: 20px; line-height: 1;
+    align-items: center; justify-content: center; appearance: none;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.5), 0 8px 20px rgba(0,0,0,0.45);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  }
+  #mobile-tweaks-btn:active { border-color: var(--neon); color: var(--neon); }
+}
