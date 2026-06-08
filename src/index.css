@@ -390,9 +390,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .dice-btn:active { box-shadow: 0 1px 0 #0a6c64; }
 
 .count-line {
-  margin-top: auto; padding-top: 14px;
+  padding-bottom: 14px; margin-bottom: 4px;
   font-family: var(--font-pixel); font-size: 18px; color: var(--teal);
-  border-top: 1px dashed rgba(255,255,255,0.2);
+  border-bottom: 1px dashed rgba(255,255,255,0.2);
 }
 .count-line b { color: var(--neon); }
 
@@ -810,28 +810,26 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     animation: fade 0.2s ease both;
   }
 
-  /* ---- RIGHT PANEL → bottom sheet ---- */
+  /* ---- RIGHT PANEL → full-screen modal ---- */
   #right {
-    top: auto !important;
+    top: 0 !important;
     right: 0; left: 0; bottom: 0;
     width: 100% !important;
-    border-radius: 20px 20px 0 0;
-    max-height: 88vh;
+    border-radius: 0;
+    max-height: 100vh;
     /* slide up from bottom instead of from the right */
     transform: translateY(100%);
     opacity: 1;
-    overflow: hidden;
+    overflow-y: auto;
     transition: transform 0.38s cubic-bezier(.2,.8,.2,1);
     display: flex; flex-direction: column;
+    scrollbar-width: thin; scrollbar-color: var(--purple) transparent;
   }
   #right.open { transform: translateY(0); }
 
-  /* Fixed header + scrollable body inside the sheet */
+  /* Whole panel scrolls together — no independent body scroll */
   #right .rhead { flex: none; }
-  #right .rbody {
-    overflow-y: auto; flex: 1;
-    scrollbar-width: thin; scrollbar-color: var(--purple) transparent;
-  }
+  #right .rbody { overflow-y: visible; flex: none; padding-bottom: 40px; }
 
   .right-drag-handle { display: block; }
 
@@ -839,9 +837,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   #right .polaroid { width: 130px; }
   #right .polaroid .pic { width: 108px; height: 108px; }
 
-  /* ---- COMPASS → small by default, tap to expand ---- */
-  #compass { width: 60px; position: relative; }
-  #compass.shift { right: 20px; } /* don't shift away — right panel is a bottom sheet */
+  /* ---- COMPASS → small, fixed top-right ---- */
+  #compass { width: 60px; /* keep position: fixed from base */ }
+  #compass.shift { right: 20px; } /* don't shift away — right panel is full-screen */
   #compass .cmp-reset { display: none; }
   #compass .cmp-legend { display: none; }
   #compass-svg { width: 60px; height: 60px; }
@@ -871,4 +869,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   }
   #mobile-tweaks-btn:active { border-color: var(--neon); color: var(--neon); }
+
+  /* ---- Hide nav hint when any panel/modal is open ---- */
+  body.mob-panel-open #nav-hint { display: none; }
 }

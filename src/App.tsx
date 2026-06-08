@@ -292,6 +292,7 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
             <button className="left-mobile-close" onClick={onCollapse} title="Close">✕</button>
           </div>
           <div className="body">
+            <div className="count-line"><b>{count}</b> of {PLAYERS.length} players in view</div>
             <div className="field">
               <label>Search</label>
               <div className="search-wrap">
@@ -359,8 +360,6 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
             <div className="field">
               <button className="btn btn-reset" onClick={onReset}>↺ Reset Filters</button>
             </div>
-
-            <div className="count-line"><b>{count}</b> of {PLAYERS.length} players in view</div>
           </div>
         </div>
 
@@ -370,6 +369,7 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
             <button className="btn btn-back" onClick={() => setPage('basic')}>‹ Back to basic filters</button>
           </div>
           <div className="body">
+            <div className="count-line"><b>{count}</b> of {PLAYERS.length} players in view</div>
             <div className="field" style={{ marginTop: 6 }}>
               <label>Filter by stat range</label>
               <div className="hint">
@@ -381,7 +381,6 @@ function LeftBar({ filters, setFilters, count, onReset, onSearchEnter, collapsed
             <div className="field">
               <button className="btn btn-reset" onClick={onReset}>↺ Reset all filters</button>
             </div>
-            <div className="count-line"><b>{count}</b> of {PLAYERS.length} players in view</div>
           </div>
         </div>
       </div>
@@ -730,6 +729,13 @@ export default function App() {
   }, [t, selected, axisMap.x, axisMap.y, axisMap.z]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { writeHash() }, [writeHash])
+
+  // Hide nav hint on mobile when any panel or modal is open
+  useEffect(() => {
+    const anyOpen = leftOpen || !!selected || modal !== null
+    document.body.classList.toggle('mob-panel-open', anyOpen)
+    return () => document.body.classList.remove('mob-panel-open')
+  }, [leftOpen, selected, modal])
 
   const toggleFav = useCallback((id: number) => {
     setFavorites(prev => {
