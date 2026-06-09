@@ -622,6 +622,9 @@ export class Universe {
       c.setPointerCapture(e.pointerId)
       this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY })
       c.classList.add('dragging')
+      // Update cursor on pointerdown so a mobile tap with no pointermove still picks correctly
+      const rect = c.getBoundingClientRect()
+      this._cursor = { x: e.clientX - rect.left, y: e.clientY - rect.top }
       if (this.ptrs.size === 1) {
         this._gesture = { pan: (e.button === 1 || e.button === 2 || e.shiftKey), moved: 0 }
       } else if (this.ptrs.size === 2) {
