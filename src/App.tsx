@@ -408,19 +408,6 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
   onTipMove: (e: React.MouseEvent) => void
   onTipLeave: () => void
 }) {
-  const touchRef = useRef<{ x: number; y: number } | null>(null)
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-  }
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchRef.current) return
-    const dy = e.changedTouches[0].clientY - touchRef.current.y
-    const dx = Math.abs(e.changedTouches[0].clientX - touchRef.current.x)
-    touchRef.current = null
-    if (dy > 80 && dx < 80) onClose()
-  }
-
   if (!player) return <div id="right" className="panel" />
 
   const stats: [string, number][] = [
@@ -435,8 +422,7 @@ function RightBar({ player, onClose, onPick, onDelete, isFav, onFavToggle, onCom
       : (player.category === 'under' ? 'Underpaid by ' : 'Overpaid by ') + fmtM(Math.abs(player.delta))
 
   return (
-    <div id="right" className="panel scroll open"
-      onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <div id="right" className="panel scroll open">
       <div className="right-drag-handle" />
       <div className="rhead">
         <button className={'r-icon-btn' + (isFav ? ' fav' : '')}
@@ -662,6 +648,8 @@ export default function App() {
           setModal('compare')
         } else {
           setSelected(p)
+          // On mobile, close the left panel so the player panel can slide in cleanly
+          if (p && window.innerWidth <= 768) setLeftOpen(false)
         }
       },
     })
@@ -731,10 +719,15 @@ export default function App() {
   useEffect(() => { writeHash() }, [writeHash])
 
   // Hide nav hint on mobile when any panel or modal is open
+  // Also hide chrome (hamburger, compass, tweaks) when the player panel is open
   useEffect(() => {
     const anyOpen = leftOpen || !!selected || modal !== null
     document.body.classList.toggle('mob-panel-open', anyOpen)
-    return () => document.body.classList.remove('mob-panel-open')
+    document.body.classList.toggle('mob-right-open', !!selected)
+    return () => {
+      document.body.classList.remove('mob-panel-open')
+      document.body.classList.remove('mob-right-open')
+    }
   }, [leftOpen, selected, modal])
 
   const toggleFav = useCallback((id: number) => {

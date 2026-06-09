@@ -810,28 +810,29 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     animation: fade 0.2s ease both;
   }
 
-  /* ---- RIGHT PANEL → full-screen modal ---- */
+  /* ---- RIGHT PANEL → full-screen, slides in from right (mirrors left panel) ---- */
   #right {
     top: 0 !important;
     right: 0; left: 0; bottom: 0;
     width: 100% !important;
     border-radius: 0;
     max-height: 100vh;
-    /* slide up from bottom instead of from the right */
-    transform: translateY(100%);
+    transform: translateX(100%);
     opacity: 1;
     overflow-y: auto;
-    transition: transform 0.38s cubic-bezier(.2,.8,.2,1);
+    transition: transform 0.35s cubic-bezier(.2,.8,.2,1);
     display: flex; flex-direction: column;
     scrollbar-width: thin; scrollbar-color: var(--purple) transparent;
+    z-index: 10;
   }
-  #right.open { transform: translateY(0); }
+  #right.open { transform: translateX(0); }
 
-  /* Whole panel scrolls together — no independent body scroll */
+  /* Whole panel scrolls as one unit — no independent body scroll */
   #right .rhead { flex: none; }
   #right .rbody { overflow-y: visible; flex: none; padding-bottom: 40px; }
 
-  .right-drag-handle { display: block; }
+  /* No drag handle needed — close button is the affordance */
+  .right-drag-handle { display: none; }
 
   /* Compact polaroid on small screens */
   #right .polaroid { width: 130px; }
@@ -872,4 +873,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
   /* ---- Hide nav hint when any panel/modal is open ---- */
   body.mob-panel-open #nav-hint { display: none; }
+
+  /* ---- Hide chrome elements when player panel is open ---- */
+  body.mob-right-open #left-expand,
+  body.mob-right-open #compass,
+  body.mob-right-open #mobile-tweaks-btn { display: none !important; }
 }
